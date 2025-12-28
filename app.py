@@ -24,7 +24,7 @@ st.markdown("""
     .stTabs [aria-selected="true"] { background-color: #f1c40f !important; color: #ffffff !important; border: none; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(241, 196, 15, 0.4); }
 
     .flashcard-container { background: white; border-radius: 20px; padding: 40px 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 25px; border-left: 12px solid #f1c40f; min-height: 350px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-    .flashcard-back { background: #fdfefe; border-left: 12px solid #2ecc71; }
+    .flashcard-back { background: #2980b9; border-left: 12px solid #2ecc71; }
     
     .battle-card { background-color: #ffffff; padding: 30px; border-radius: 15px; border: 2px solid #3498db; border-left: 15px solid #2980b9; box-shadow: 0 5px 15px rgba(0,0,0,0.1); text-align: center; margin-bottom: 20px; color: #2c3e50; }
     .battle-word { font-size: 56px; font-weight: 900; color: #2c3e50; margin: 15px 0; }
@@ -38,7 +38,7 @@ st.markdown("""
     .sent-cn { font-size: 18px; color: #16a085; font-weight: bold; }
     .tag-badge { background-color: #e1f5fe; color: #0288d1; padding: 5px 15px; border-radius: 15px; font-size: 14px; font-weight: bold; margin-bottom: 15px; display: inline-block; }
     
-    .rpg-container { background-color: #2c3e50; padding: 20px; border-radius: 15px; color: white; text-align: center; margin-bottom: 20px; border: 3px solid #f1c40f; }
+    .rpg-container { background-color: #2c3e50; padding: 20px; border-radius: 15px; color: black; text-align: center; margin-bottom: 20px; border: 3px solid #f1c40f; }
     .monster-img { font-size: 100px; margin-bottom: 10px; animation: bounce 2s infinite; }
     .health-bar-container { width: 100%; background-color: #555; border-radius: 10px; margin: 10px 0; height: 25px; }
     .health-bar-fill { height: 100%; border-radius: 10px; transition: width 0.5s ease-in-out; }
