@@ -9,7 +9,7 @@ import time
 import datetime
 
 # --- 1. 頁面設定 ---
-st.set_page_config(page_title="TOEIC 3000 Coach", page_icon="👑", layout="wide")
+st.set_page_config(page_title="TOEIC Cloud Coach", page_icon="👑", layout="wide")
 
 # --- 2. CSS 美化 ---
 st.markdown("""
@@ -61,17 +61,14 @@ def load_data():
             df_vocab = pd.read_excel(DATA_FILE)
             df_vocab.columns = [c.strip().lower() for c in df_vocab.columns]
             
-            # 確保欄位存在
             expected_cols = ['word', 'meaning', 'phonetic', 'sentence', 'sentence_cn', 'type', 'week']
             for col in expected_cols:
                 if col not in df_vocab.columns:
                     df_vocab[col] = ''
             
-            # 轉字串並處理 NaN
             for col in df_vocab.columns:
                 df_vocab[col] = df_vocab[col].astype(str).replace('nan', '')
                 
-            # 去除單字本身的重複
             df_vocab.drop_duplicates(subset=['word'], inplace=True)
             
         except Exception as e:
@@ -83,8 +80,6 @@ def load_data():
 
     if os.path.exists(PROGRESS_FILE):
         df_prog = pd.read_csv(PROGRESS_FILE)
-        
-        # 關鍵修復：去除進度表中的重複項
         df_prog.drop_duplicates(subset=['word'], keep='last', inplace=True)
         
         if 'last_review_date' not in df_prog.columns:
@@ -142,27 +137,38 @@ with st.sidebar:
         st.markdown(f"**XP:** {st.session_state.xp}")
         st.markdown("---")
         
+        # 類別清單
         cats = ["全部 (All)"] + sorted([x for x in df['type'].unique() if x])
-        selected_cat = st.selectbox("📂 選擇分類", cats)
-            
+        selected_cat = st.selectbox("📂 選擇分類 (優先)", cats)
+        
+        # 週次清單
         try:
             weeks = sorted([int(float(x)) for x in df['week'].unique() if x])
         except:
             weeks = sorted(df['week'].unique())
             
-        selected_week = st.selectbox("📅 選擇週次", weeks, format_func=lambda x: f"Week {x}")
+        # 如果選了特定分類，就禁用週次選單（或是顯示為灰色）
+        disabled_week = (selected_cat != "全部 (All)")
+        selected_week = st.selectbox("📅 選擇週次", weeks, format_func=lambda x: f"Week {x}", disabled=disabled_week)
+        
+        if disabled_week:
+            st.caption("ℹ️ 已選擇特定分類，週次篩選暫時停用。")
 
-# --- 5. 篩選 ---
+# --- 5. 智慧篩選邏輯 (關鍵修正) ---
 if df.empty: st.stop()
 
 df['week'] = pd.to_numeric(df['week'], errors='coerce')
-filtered_df = df[df['week'] == selected_week]
 
+# 邏輯：如果有選分類，就只看分類；否則看週次
 if selected_cat != "全部 (All)":
-    filtered_df = filtered_df[filtered_df['type'] == selected_cat]
-
-review_df = df[(df['week'] < selected_week) & (df['level'] < 3)]
-learning_pool = pd.concat([filtered_df, review_df]).drop_duplicates(subset=['word'])
+    # 模式 A: 針對分類特訓 (忽略週次)
+    learning_pool = df[df['type'] == selected_cat]
+    st.toast(f"已切換至【{selected_cat}】專項特訓模式！", icon="📂")
+else:
+    # 模式 B: 照週次進度 (含複習)
+    current_week_words = df[df['week'] == selected_week]
+    review_words = df[(df['week'] < selected_week) & (df['level'] < 3)]
+    learning_pool = pd.concat([current_week_words, review_words]).drop_duplicates(subset=['word'])
 
 # --- 6. 主畫面 ---
 tab1, tab2, tab3 = st.tabs(["🔥 閃卡特訓", "⚔️ 挑戰擂台", "📊 單字總表"])
@@ -172,12 +178,14 @@ with tab1:
     if learning_pool.empty:
         st.info("本範圍無單字。")
     else:
+        # 索引保護
         if st.session_state.fc_index >= len(learning_pool):
             st.session_state.fc_index = 0
             
         idx = st.session_state.fc_index
         row = learning_pool.iloc[idx]
-        st.caption(f"📚 進度: {idx + 1}/{len(learning_pool)}")
+        
+        st.caption(f"📚 範圍: {selected_cat if selected_cat != '全部 (All)' else f'Week {selected_week}'} | 進度: {idx + 1}/{len(learning_pool)}")
 
         if not st.session_state.fc_flip:
             st.markdown(f"""
@@ -248,7 +256,7 @@ with tab1:
 # === TAB 2: 測驗 ===
 with tab2:
     if len(learning_pool) < 4:
-        st.warning("單字量不足。")
+        st.warning("單字量不足 (至少需要4個單字才能測驗)。")
     else:
         if 'quiz_q' not in st.session_state or st.session_state.quiz_q is None:
             q_row = learning_pool.sample(1).iloc[0]
@@ -289,28 +297,42 @@ with tab2:
 
 # === TAB 3: 總表 ===
 with tab3:
-    st.markdown("### 📊 完整單字庫 (已啟用分頁模式)")
+    st.markdown("### 📊 完整單字庫")
     
     search_term = st.text_input("🔍 搜尋單字 (Search)", "")
     
+    # 搜尋邏輯
     if search_term:
         display_df = df[df['word'].str.contains(search_term, case=False, na=False)]
     else:
-        display_df = df
+        # 如果選擇了分類，總表也只顯示該分類 (讓使用者不困惑)
+        if selected_cat != "全部 (All)":
+            display_df = df[df['type'] == selected_cat]
+        else:
+            display_df = df
 
-    PAGE_SIZE = 50
-    total_pages = (len(display_df) // PAGE_SIZE) + 1
-    
-    col_p1, col_p2 = st.columns([1, 3])
-    with col_p1:
-        page_num = st.number_input("頁碼", min_value=1, max_value=total_pages, value=1)
-    
-    start_idx = (page_num - 1) * PAGE_SIZE
-    end_idx = start_idx + PAGE_SIZE
-    
+    # --- 新增功能：顯示全部開關 ---
+    col_t1, col_t2 = st.columns([1, 1])
+    with col_t1:
+        st.write(f"**總筆數:** {len(display_df)}")
+    with col_t2:
+        show_all = st.checkbox("顯示全部 (取消分頁)")
+
     view_cols = ['week', 'type', 'word', 'phonetic', 'meaning', 'level', 'last_review_date']
-    
-    # --- 修正重點：移除 use_container_width=True ---
-    st.dataframe(display_df[view_cols].iloc[start_idx:end_idx])
-    
-    st.caption(f"顯示第 {start_idx+1} 到 {min(end_idx, len(display_df))} 筆，共 {len(display_df)} 筆")
+
+    if show_all:
+        st.dataframe(display_df[view_cols])
+    else:
+        # 分頁邏輯
+        PAGE_SIZE = 50
+        total_pages = max(1, (len(display_df) // PAGE_SIZE) + 1)
+        
+        col_p1, col_p2 = st.columns([1, 3])
+        with col_p1:
+            page_num = st.number_input("頁碼", min_value=1, max_value=total_pages, value=1)
+        
+        start_idx = (page_num - 1) * PAGE_SIZE
+        end_idx = start_idx + PAGE_SIZE
+        
+        st.dataframe(display_df[view_cols].iloc[start_idx:end_idx])
+        st.caption(f"顯示第 {start_idx+1} 到 {min(end_idx, len(display_df))} 筆")
