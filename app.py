@@ -11,7 +11,7 @@ import datetime
 # --- 1. 頁面設定 ---
 st.set_page_config(page_title="TOEIC Game Master", page_icon="🎮", layout="wide")
 
-# --- 2. CSS 美化 (含遊戲介面優化) ---
+# --- 2. CSS 美化 ---
 st.markdown("""
     <style>
     .stApp { background-color: #f4f6f9; }
@@ -24,10 +24,25 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { height: 55px; background-color: #e0e0e0; border-radius: 8px; border: 1px solid #ccc; color: #333333 !important; font-weight: 700; font-size: 18px; padding: 0 25px; }
     .stTabs [aria-selected="true"] { background-color: #f1c40f !important; color: #ffffff !important; border: none; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(241, 196, 15, 0.4); }
 
-    /* 卡片設計 */
+    /* 閃卡與卡片設計 */
     .flashcard-container { background: white; border-radius: 20px; padding: 40px 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 25px; border-left: 12px solid #f1c40f; min-height: 350px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     .flashcard-back { background: #fdfefe; border-left: 12px solid #2ecc71; }
     
+    /* 戰鬥與測驗專用卡片 */
+    .battle-card {
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 15px;
+        border: 2px solid #3498db; /* 測驗用藍色，戰鬥用紅色 */
+        border-left: 15px solid #2980b9;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        text-align: center;
+        margin-bottom: 20px;
+        color: #2c3e50;
+    }
+    .battle-word { font-size: 56px; font-weight: 900; color: #2c3e50; margin: 15px 0; }
+    .battle-label { font-size: 18px; color: #7f8c8d; font-weight: bold; text-transform: uppercase; }
+
     .word-title { font-size: 64px; font-weight: 900; color: #2c3e50; margin-bottom: 5px; }
     .phonetic-text { font-family: 'Lucida Sans Unicode', sans-serif; font-size: 24px; color: #95a5a6; margin-bottom: 20px; font-style: italic; }
     .meaning-text { font-size: 40px; color: #c0392b; font-weight: bold; margin: 20px 0; }
@@ -36,7 +51,7 @@ st.markdown("""
     .sent-cn { font-size: 18px; color: #16a085; font-weight: bold; }
     .tag-badge { background-color: #e1f5fe; color: #0288d1; padding: 5px 15px; border-radius: 15px; font-size: 14px; font-weight: bold; margin-bottom: 15px; display: inline-block; }
     
-    /* 遊戲區樣式 */
+    /* RPG 樣式 */
     .rpg-container { background-color: #2c3e50; padding: 20px; border-radius: 15px; color: white; text-align: center; margin-bottom: 20px; border: 3px solid #f1c40f; }
     .monster-img { font-size: 100px; margin-bottom: 10px; animation: bounce 2s infinite; }
     .health-bar-container { width: 100%; background-color: #555; border-radius: 10px; margin: 10px 0; height: 25px; }
@@ -92,10 +107,8 @@ def load_data():
     if os.path.exists(PROGRESS_FILE):
         df_prog = pd.read_csv(PROGRESS_FILE)
         df_prog.drop_duplicates(subset=['word'], keep='last', inplace=True)
-        
         if 'last_review_date' not in df_prog.columns:
             df_prog['last_review_date'] = ''
-            
         df_vocab = pd.merge(df_vocab, df_prog, on='word', how='left')
         df_vocab['level'] = df_vocab['level'].fillna(1).astype(int)
         df_vocab['last_review_date'] = df_vocab['last_review_date'].fillna('')
@@ -125,13 +138,11 @@ if 'xp' not in st.session_state: st.session_state.xp = 0
 if 'fc_index' not in st.session_state: st.session_state.fc_index = 0
 if 'fc_flip' not in st.session_state: st.session_state.fc_flip = False
 
-# RPG 遊戲變數
+# RPG 變數
 if 'monster_hp' not in st.session_state: st.session_state.monster_hp = 100
 if 'player_hp' not in st.session_state: st.session_state.player_hp = 100
-if 'rpg_q' not in st.session_state: st.session_state.rpg_q = None
-if 'game_status' not in st.session_state: st.session_state.game_status = "playing" # playing, win, lose
+if 'game_status' not in st.session_state: st.session_state.game_status = "playing"
 
-# 載入資料
 df = load_data()
 
 # --- 4. 側邊欄 ---
@@ -149,16 +160,13 @@ with st.sidebar:
         st.markdown("### 📊 金色證書進度")
         st.progress(min(mastered / total if total > 0 else 0, 1.0))
         st.write(f"已精通: {mastered} / {total}")
-        
         st.markdown(f"**XP:** {st.session_state.xp}")
         st.markdown("---")
         
-        # 篩選區
         cats = ["全部 (All)"] + sorted([x for x in df['type'].unique() if x])
         selected_cat = st.selectbox("📂 選擇分類", cats)
         
         try:
-            # 轉換 Week 為數字以便排序
             valid_weeks = []
             for w in df['week'].unique():
                 try: valid_weeks.append(int(float(w)))
@@ -169,27 +177,20 @@ with st.sidebar:
             
         selected_week = st.selectbox("📅 選擇週次", weeks)
 
-# --- 5. 彈性篩選邏輯 (修正點 2) ---
+# --- 5. 篩選邏輯 ---
 if df.empty: st.stop()
 
-# 基礎資料
 df['week'] = pd.to_numeric(df['week'], errors='coerce')
 learning_pool = df.copy()
 
-# 第一層：分類篩選
 if selected_cat != "全部 (All)":
     learning_pool = learning_pool[learning_pool['type'] == selected_cat]
 
-# 第二層：週次篩選 (交集)
 if selected_week != "全部 (All)":
     learning_pool = learning_pool[learning_pool['week'] == selected_week]
 
-# 如果池子太小，為了複習機制，可以混入該分類下的其他錯字 (選用)
-# 但為了符合你的需求"顯示相對應的分類"，這裡我們嚴格執行交集
-# 唯一例外：如果交集為空，提示使用者
 if learning_pool.empty:
     st.warning("⚠️ 此分類與週次的組合下沒有單字，請嘗試調整篩選條件。")
-    # 為了不讓程式報錯，我們 fallback 到全部
     learning_pool = df.head(1)
 
 # --- 6. 主畫面 ---
@@ -197,7 +198,6 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔥 閃卡特訓", "⚔️ 挑戰擂�
 
 # === TAB 1: 閃卡 ===
 with tab1:
-    # 索引保護
     if st.session_state.fc_index >= len(learning_pool):
         st.session_state.fc_index = 0
         
@@ -258,7 +258,6 @@ with tab1:
         with b1:
             if st.button("❌ 陌生", use_container_width=True):
                 df = update_learning_status(df, row['word'], new_level=1)
-                # 修正點 1: 移除了 st.toast，避免干擾
                 next_card()
                 st.rerun()
         with b2:
@@ -269,7 +268,7 @@ with tab1:
                 next_card()
                 st.rerun()
 
-# === TAB 2: 測驗 ===
+# === TAB 2: 測驗 (擂台) ===
 with tab2:
     if len(learning_pool) < 4:
         st.warning("單字量不足 (至少需要4個)。")
@@ -284,25 +283,34 @@ with tab2:
             st.session_state.quiz_opts = opts
 
         q = st.session_state.quiz_q
+        
+        # --- 修正點：使用 battle-card 樣式並增加發音按鈕 ---
         st.markdown(f"""
-        <div class="flashcard-container" style="border-left: 12px solid #3498db; min-height: 200px;">
-            <div style="font-size:20px; color:#bdc3c7;">Meaning?</div>
-            <div class="word-title" style="color:#2980b9;">{q['word']}</div>
+        <div class="battle-card">
+            <div class="battle-label">Question</div>
+            <div class="battle-word">{q['word']}</div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # 發音按鈕
+        col_audio_q, col_space_q = st.columns([1, 4])
+        with col_audio_q:
+            if st.button("🔊 聽發音", key="quiz_audio_btn"):
+                autoplay_audio(q['word'])
         
         cols = st.columns(2)
         for i, opt in enumerate(st.session_state.quiz_opts):
             def check_ans(o=opt):
-                current_lvl = df.loc[df['word'] == q['word'], 'level'].values[0]
                 if o == q['meaning']:
                     st.toast("✅ 正確！", icon="🎉")
                     st.session_state.xp += 20
-                    autoplay_audio("Correct")
-                    df_upd = update_learning_status(df, q['word'], new_level=min(4, current_lvl + 1))
+                    # --- 修正點：播放長語句 Correct ---
+                    autoplay_audio("That is correct! Great job!")
+                    df_upd = update_learning_status(df, q['word'], new_level=min(4, df.loc[df['word'] == q['word'], 'level'].values[0] + 1))
                 else:
                     st.toast("❌ 錯誤", icon="⚠️")
-                    autoplay_audio("Wrong")
+                    # --- 修正點：播放長語句 Wrong ---
+                    autoplay_audio("Sorry, that is incorrect.")
                     df_upd = update_learning_status(df, q['word'], new_level=1)
                 st.session_state.quiz_q = None
                 
@@ -310,21 +318,19 @@ with tab2:
                 check_ans()
                 st.rerun()
 
-# === TAB 3: 聽音拼字 (Spelling Bee) ===
+# === TAB 3: 聽音拼字 ===
 with tab3:
     st.header("🎧 聽音拼字挑戰")
     
     if 'spell_q' not in st.session_state or st.session_state.spell_q is None:
         st.session_state.spell_q = learning_pool.sample(1).iloc[0]
-        st.session_state.spell_input = ""
-        st.session_state.spell_checked = False
 
     sq = st.session_state.spell_q
     
     col_s1, col_s2 = st.columns([1, 2])
     
     with col_s1:
-        if st.button("🔊 播放發音 (Play)", use_container_width=True, type="primary"):
+        if st.button("🔊 播放發音", use_container_width=True, type="primary"):
             autoplay_audio(sq['word'])
     
     with col_s2:
@@ -334,19 +340,17 @@ with tab3:
     
     if st.button("送出檢查"):
         if user_spell.strip().lower() == sq['word'].strip().lower():
-            st.success("✅ 拼對了！太強了！")
-            autoplay_audio("Correct")
+            st.success("✅ 拼對了！")
+            autoplay_audio("That is correct!")
             st.session_state.xp += 30
-            # 升級
-            df = update_learning_status(df, sq['word'], new_level=4)
+            update_learning_status(df, sq['word'], new_level=4)
             time.sleep(1)
-            st.session_state.spell_q = None # 換題
+            st.session_state.spell_q = None
             st.rerun()
         else:
-            st.error(f"❌ 拼錯囉！正確答案是: {sq['word']}")
-            autoplay_audio("Try again")
-            # 降級
-            df = update_learning_status(df, sq['word'], new_level=1)
+            st.error(f"❌ 錯誤！正確是: {sq['word']}")
+            autoplay_audio("Sorry, incorrect.")
+            update_learning_status(df, sq['word'], new_level=1)
             if st.button("再試一題"):
                 st.session_state.spell_q = None
                 st.rerun()
@@ -355,19 +359,17 @@ with tab3:
 with tab4:
     st.header("👹 勇者鬥惡龍")
     
-    # 遊戲初始化或重置
-    if st.button("🔄 重置遊戲 (Reset Game)"):
+    if st.button("🔄 重置遊戲"):
         st.session_state.monster_hp = 100
         st.session_state.player_hp = 100
         st.session_state.game_status = "playing"
         st.session_state.rpg_q = None
         st.rerun()
 
-    # 狀態顯示
+    # 顯示血條
     m_hp = st.session_state.monster_hp
     p_hp = st.session_state.player_hp
     
-    # 血條顯示 HTML
     st.markdown(f"""
     <div class="rpg-container">
         <div class="monster-img">{'👿' if m_hp > 0 else '💀'}</div>
@@ -387,33 +389,24 @@ with tab4:
             <p>HP: {p_hp}/100</p>
         </div>
         <div style="font-size:30px;">VS</div>
-        <div style="width:45%; text-align:center;">
-            <p>答對: 攻擊怪獸 <br> 答錯: 受到傷害</p>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 遊戲邏輯
     if st.session_state.game_status == "win":
         st.balloons()
-        st.success("🏆 恭喜！你打倒了魔王！獲得 500 XP！")
+        st.success("🏆 恭喜！你打倒了魔王！")
         if st.button("再來一局"):
             st.session_state.monster_hp = 100
             st.session_state.player_hp = 100
             st.session_state.game_status = "playing"
-            st.session_state.xp += 500
             st.rerun()
-            
     elif st.session_state.game_status == "lose":
-        st.error("💀 你被打敗了... 請重新修煉再來！")
-        if st.button("復活再戰"):
-            st.session_state.monster_hp = 100
+        st.error("💀 你被打敗了...")
+        if st.button("復活"):
             st.session_state.player_hp = 100
             st.session_state.game_status = "playing"
             st.rerun()
-            
     else:
-        # 出題
         if st.session_state.rpg_q is None:
             st.session_state.rpg_q = learning_pool.sample(1).iloc[0]
             correct_r = st.session_state.rpg_q['meaning']
@@ -424,33 +417,44 @@ with tab4:
 
         rq = st.session_state.rpg_q
         
-        st.markdown(f"### ⚔️ 攻擊指令: **{rq['word']}**")
+        # 戰鬥卡片
+        st.markdown(f"""
+        <div class="battle-card" style="border-color: #e74c3c;">
+            <div class="battle-label" style="color:#e74c3c;">⚔️ 攻擊指令 (Attack Command)</div>
+            <div class="battle-word">{rq['word']}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
+        # 發音按鈕
+        col_audio, col_space = st.columns([1, 4])
+        with col_audio:
+            if st.button("🔊 聽發音", key="rpg_audio_btn"):
+                autoplay_audio(rq['word'])
+
         r_cols = st.columns(2)
         for i, opt in enumerate(st.session_state.rpg_opts):
             def rpg_attack(selected=opt):
                 if selected == rq['meaning']:
                     dmg = random.randint(15, 25)
                     st.session_state.monster_hp = max(0, st.session_state.monster_hp - dmg)
+                    # --- 修正點：播放長語句音效 ---
+                    autoplay_audio("That is correct! Attack!") 
                     st.toast(f"⚔️ 攻擊成功！造成 {dmg} 點傷害！", icon="💥")
-                    autoplay_audio("Attack")
-                    # 升級
-                    df_upd = update_learning_status(df, rq['word'], new_level=4)
+                    update_learning_status(df, rq['word'], new_level=4)
                 else:
                     dmg = random.randint(10, 20)
                     st.session_state.player_hp = max(0, st.session_state.player_hp - dmg)
+                    # --- 修正點：播放長語句音效 ---
+                    autoplay_audio("Wrong! You take damage.")
                     st.toast(f"🛡️ 答錯了！受到 {dmg} 點傷害！", icon="🩸")
-                    autoplay_audio("Oh no")
-                    # 降級
-                    df_upd = update_learning_status(df, rq['word'], new_level=1)
+                    update_learning_status(df, rq['word'], new_level=1)
                 
-                # 判斷勝負
                 if st.session_state.monster_hp == 0:
                     st.session_state.game_status = "win"
                 elif st.session_state.player_hp == 0:
                     st.session_state.game_status = "lose"
                 
-                st.session_state.rpg_q = None # 換題
+                st.session_state.rpg_q = None
                 
             if r_cols[i % 2].button(opt, key=f"rpg_{i}", use_container_width=True):
                 rpg_attack()
@@ -459,8 +463,7 @@ with tab4:
 # === TAB 5: 總表 ===
 with tab5:
     st.markdown("### 📊 完整單字庫")
-    
-    search_term = st.text_input("🔍 搜尋單字 (Search)", "")
+    search_term = st.text_input("🔍 搜尋單字", "")
     
     if search_term:
         display_df = df[df['word'].str.contains(search_term, case=False, na=False)]
@@ -471,10 +474,8 @@ with tab5:
             display_df = df
 
     col_t1, col_t2 = st.columns([1, 1])
-    with col_t1:
-        st.write(f"**總筆數:** {len(display_df)}")
-    with col_t2:
-        show_all = st.checkbox("顯示全部 (取消分頁)")
+    with col_t1: st.write(f"**總筆數:** {len(display_df)}")
+    with col_t2: show_all = st.checkbox("顯示全部")
 
     view_cols = ['week', 'type', 'word', 'phonetic', 'meaning', 'level', 'last_review_date']
 
@@ -483,13 +484,8 @@ with tab5:
     else:
         PAGE_SIZE = 50
         total_pages = max(1, (len(display_df) // PAGE_SIZE) + 1)
-        
         col_p1, col_p2 = st.columns([1, 3])
-        with col_p1:
-            page_num = st.number_input("頁碼", min_value=1, max_value=total_pages, value=1)
-        
+        with col_p1: page_num = st.number_input("頁碼", 1, total_pages, 1)
         start_idx = (page_num - 1) * PAGE_SIZE
         end_idx = start_idx + PAGE_SIZE
-        
         st.dataframe(display_df[view_cols].iloc[start_idx:end_idx])
-        st.caption(f"顯示第 {start_idx+1} 到 {min(end_idx, len(display_df))} 筆")
