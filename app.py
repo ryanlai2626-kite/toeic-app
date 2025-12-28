@@ -11,18 +11,38 @@ import datetime
 # --- 1. 頁面設定 ---
 st.set_page_config(page_title="TOEIC Game Master", page_icon="🎮", layout="wide")
 
-# --- 2. CSS 美化 ---
+# --- 2. CSS 美化 (視覺修復版) ---
 st.markdown("""
     <style>
+    /* 全站背景 */
     .stApp { background-color: #f4f6f9; }
+    
+    /* --- 1. 側邊欄 (維持原樣) --- */
     [data-testid="stSidebar"] { background-color: #2c3e50; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #f1c40f !important; }
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div { color: #ecf0f1 !important; font-size: 16px; }
+
+    /* --- 2. 主畫面標題修復 (解決看不清楚的問題) --- */
+    /* 強制將主畫面的標題設為深藍色，對比度最高 */
+    .main h1, .main h2, .main h3, .main h4 {
+        color: #2c3e50 !important;
+        font-weight: 800 !important;
+    }
     
+    /* --- 3. caption 小字修復 (解決進度文字看不清楚) --- */
+    /* 針對 st.caption 產生的文字 */
+    .stCaption, [data-testid="stCaptionContainer"] {
+        color: #5d6d7e !important; /* 深灰色 */
+        font-size: 16px !important;
+        font-weight: bold !important;
+    }
+
+    /* --- 4. Tab 標籤頁優化 --- */
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: transparent; padding-bottom: 10px; }
     .stTabs [data-baseweb="tab"] { height: 55px; background-color: #e0e0e0; border-radius: 8px; border: 1px solid #ccc; color: #333333 !important; font-weight: 700; font-size: 18px; padding: 0 25px; }
     .stTabs [aria-selected="true"] { background-color: #f1c40f !important; color: #ffffff !important; border: none; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(241, 196, 15, 0.4); }
 
+    /* --- 5. 卡片設計 --- */
     .flashcard-container { background: white; border-radius: 20px; padding: 40px 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 25px; border-left: 12px solid #f1c40f; min-height: 350px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     .flashcard-back { background: #fdfefe; border-left: 12px solid #2ecc71; }
     
@@ -38,7 +58,18 @@ st.markdown("""
     .sent-cn { font-size: 18px; color: #16a085; font-weight: bold; }
     .tag-badge { background-color: #e1f5fe; color: #0288d1; padding: 5px 15px; border-radius: 15px; font-size: 14px; font-weight: bold; margin-bottom: 15px; display: inline-block; }
     
-    .rpg-container { background-color: #2c3e50; padding: 20px; border-radius: 15px; color: white; text-align: center; margin-bottom: 20px; border: 3px solid #f1c40f; }
+    /* --- 6. RPG 遊戲區例外處理 --- */
+    /* 因為 RPG 背景是深色，所以這裡要強制把文字改回亮色，不然會被上面的規則變成深色而看不見 */
+    .rpg-container { background-color: #2c3e50; padding: 20px; border-radius: 15px; color: white !important; text-align: center; margin-bottom: 20px; border: 3px solid #f1c40f; }
+    
+    .rpg-container h3, .rpg-container h4, .rpg-container p {
+        color: #ffffff !important; /* 強制白色 */
+    }
+    /* 特別指定魔王名稱為金色 */
+    .rpg-container h3 {
+        color: #f1c40f !important; 
+    }
+
     .monster-img { font-size: 100px; margin-bottom: 10px; animation: bounce 2s infinite; }
     .health-bar-container { width: 100%; background-color: #555; border-radius: 10px; margin: 10px 0; height: 25px; }
     .health-bar-fill { height: 100%; border-radius: 10px; transition: width 0.5s ease-in-out; }
@@ -118,8 +149,7 @@ def update_learning_status(df, word, new_level=None):
         save_progress(df)
     return df
 
-# --- 關鍵修正：全域變數安全初始化 ---
-# 確保所有變數在程式一開始都存在，防止 AttributeError
+# 初始化 Session State
 default_values = {
     'xp': 0,
     'fc_index': 0,
@@ -127,13 +157,12 @@ default_values = {
     'monster_hp': 100,
     'player_hp': 100,
     'game_status': "playing",
-    'quiz_q': None,    # 測驗題目
-    'quiz_opts': [],   # 測驗選項
-    'spell_q': None,   # 拼字題目
-    'rpg_q': None,     # RPG 題目
-    'rpg_opts': []     # RPG 選項
+    'quiz_q': None,
+    'quiz_opts': [],
+    'spell_q': None,
+    'rpg_q': None,
+    'rpg_opts': []
 }
-
 for key, val in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
@@ -199,6 +228,7 @@ with tab1:
     idx = st.session_state.fc_index
     row = learning_pool.iloc[idx]
     
+    # 這裡的文字顏色會被 CSS 強制修正為深灰色
     st.caption(f"📚 範圍單字數: {len(learning_pool)} | 進度: {idx + 1}")
 
     if not st.session_state.fc_flip:
@@ -397,7 +427,6 @@ with tab4:
             st.session_state.game_status = "playing"
             st.rerun()
     else:
-        # 使用安全的屬性檢查，避免 AttributeError
         if st.session_state.rpg_q is None:
             st.session_state.rpg_q = learning_pool.sample(1).iloc[0]
             correct_r = st.session_state.rpg_q['meaning']
@@ -476,4 +505,3 @@ with tab5:
         start_idx = (page_num - 1) * PAGE_SIZE
         end_idx = start_idx + PAGE_SIZE
         st.dataframe(display_df[view_cols].iloc[start_idx:end_idx])
-
