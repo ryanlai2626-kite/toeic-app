@@ -3,3 +3,4 @@ pandas
 gTTS
 gspread
 oauth2client
+openpyxl
