@@ -19,27 +19,14 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #f1c40f !important; }
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div { color: #ecf0f1 !important; font-size: 16px; }
     
-    /* Tab 優化 */
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: transparent; padding-bottom: 10px; }
     .stTabs [data-baseweb="tab"] { height: 55px; background-color: #e0e0e0; border-radius: 8px; border: 1px solid #ccc; color: #333333 !important; font-weight: 700; font-size: 18px; padding: 0 25px; }
     .stTabs [aria-selected="true"] { background-color: #f1c40f !important; color: #ffffff !important; border: none; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(241, 196, 15, 0.4); }
 
-    /* 閃卡與卡片設計 */
     .flashcard-container { background: white; border-radius: 20px; padding: 40px 30px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 25px; border-left: 12px solid #f1c40f; min-height: 350px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     .flashcard-back { background: #fdfefe; border-left: 12px solid #2ecc71; }
     
-    /* 戰鬥與測驗專用卡片 */
-    .battle-card {
-        background-color: #ffffff;
-        padding: 30px;
-        border-radius: 15px;
-        border: 2px solid #3498db; /* 測驗用藍色，戰鬥用紅色 */
-        border-left: 15px solid #2980b9;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        text-align: center;
-        margin-bottom: 20px;
-        color: #2c3e50;
-    }
+    .battle-card { background-color: #ffffff; padding: 30px; border-radius: 15px; border: 2px solid #3498db; border-left: 15px solid #2980b9; box-shadow: 0 5px 15px rgba(0,0,0,0.1); text-align: center; margin-bottom: 20px; color: #2c3e50; }
     .battle-word { font-size: 56px; font-weight: 900; color: #2c3e50; margin: 15px 0; }
     .battle-label { font-size: 18px; color: #7f8c8d; font-weight: bold; text-transform: uppercase; }
 
@@ -51,14 +38,12 @@ st.markdown("""
     .sent-cn { font-size: 18px; color: #16a085; font-weight: bold; }
     .tag-badge { background-color: #e1f5fe; color: #0288d1; padding: 5px 15px; border-radius: 15px; font-size: 14px; font-weight: bold; margin-bottom: 15px; display: inline-block; }
     
-    /* RPG 樣式 */
     .rpg-container { background-color: #2c3e50; padding: 20px; border-radius: 15px; color: white; text-align: center; margin-bottom: 20px; border: 3px solid #f1c40f; }
     .monster-img { font-size: 100px; margin-bottom: 10px; animation: bounce 2s infinite; }
     .health-bar-container { width: 100%; background-color: #555; border-radius: 10px; margin: 10px 0; height: 25px; }
     .health-bar-fill { height: 100%; border-radius: 10px; transition: width 0.5s ease-in-out; }
     
     @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-    
     audio { display: none; }
     </style>
     """, unsafe_allow_html=True)
@@ -133,15 +118,25 @@ def update_learning_status(df, word, new_level=None):
         save_progress(df)
     return df
 
-# 初始化 Session State
-if 'xp' not in st.session_state: st.session_state.xp = 0
-if 'fc_index' not in st.session_state: st.session_state.fc_index = 0
-if 'fc_flip' not in st.session_state: st.session_state.fc_flip = False
+# --- 關鍵修正：全域變數安全初始化 ---
+# 確保所有變數在程式一開始都存在，防止 AttributeError
+default_values = {
+    'xp': 0,
+    'fc_index': 0,
+    'fc_flip': False,
+    'monster_hp': 100,
+    'player_hp': 100,
+    'game_status': "playing",
+    'quiz_q': None,    # 測驗題目
+    'quiz_opts': [],   # 測驗選項
+    'spell_q': None,   # 拼字題目
+    'rpg_q': None,     # RPG 題目
+    'rpg_opts': []     # RPG 選項
+}
 
-# RPG 變數
-if 'monster_hp' not in st.session_state: st.session_state.monster_hp = 100
-if 'player_hp' not in st.session_state: st.session_state.player_hp = 100
-if 'game_status' not in st.session_state: st.session_state.game_status = "playing"
+for key, val in default_values.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 df = load_data()
 
@@ -273,7 +268,7 @@ with tab2:
     if len(learning_pool) < 4:
         st.warning("單字量不足 (至少需要4個)。")
     else:
-        if 'quiz_q' not in st.session_state or st.session_state.quiz_q is None:
+        if st.session_state.quiz_q is None:
             q_row = learning_pool.sample(1).iloc[0]
             st.session_state.quiz_q = q_row
             correct = q_row['meaning']
@@ -284,7 +279,6 @@ with tab2:
 
         q = st.session_state.quiz_q
         
-        # --- 修正點：使用 battle-card 樣式並增加發音按鈕 ---
         st.markdown(f"""
         <div class="battle-card">
             <div class="battle-label">Question</div>
@@ -292,7 +286,6 @@ with tab2:
         </div>
         """, unsafe_allow_html=True)
         
-        # 發音按鈕
         col_audio_q, col_space_q = st.columns([1, 4])
         with col_audio_q:
             if st.button("🔊 聽發音", key="quiz_audio_btn"):
@@ -304,12 +297,10 @@ with tab2:
                 if o == q['meaning']:
                     st.toast("✅ 正確！", icon="🎉")
                     st.session_state.xp += 20
-                    # --- 修正點：播放長語句 Correct ---
                     autoplay_audio("That is correct! Great job!")
                     df_upd = update_learning_status(df, q['word'], new_level=min(4, df.loc[df['word'] == q['word'], 'level'].values[0] + 1))
                 else:
                     st.toast("❌ 錯誤", icon="⚠️")
-                    # --- 修正點：播放長語句 Wrong ---
                     autoplay_audio("Sorry, that is incorrect.")
                     df_upd = update_learning_status(df, q['word'], new_level=1)
                 st.session_state.quiz_q = None
@@ -322,7 +313,7 @@ with tab2:
 with tab3:
     st.header("🎧 聽音拼字挑戰")
     
-    if 'spell_q' not in st.session_state or st.session_state.spell_q is None:
+    if st.session_state.spell_q is None:
         st.session_state.spell_q = learning_pool.sample(1).iloc[0]
 
     sq = st.session_state.spell_q
@@ -366,7 +357,6 @@ with tab4:
         st.session_state.rpg_q = None
         st.rerun()
 
-    # 顯示血條
     m_hp = st.session_state.monster_hp
     p_hp = st.session_state.player_hp
     
@@ -407,6 +397,7 @@ with tab4:
             st.session_state.game_status = "playing"
             st.rerun()
     else:
+        # 使用安全的屬性檢查，避免 AttributeError
         if st.session_state.rpg_q is None:
             st.session_state.rpg_q = learning_pool.sample(1).iloc[0]
             correct_r = st.session_state.rpg_q['meaning']
@@ -417,7 +408,6 @@ with tab4:
 
         rq = st.session_state.rpg_q
         
-        # 戰鬥卡片
         st.markdown(f"""
         <div class="battle-card" style="border-color: #e74c3c;">
             <div class="battle-label" style="color:#e74c3c;">⚔️ 攻擊指令 (Attack Command)</div>
@@ -425,7 +415,6 @@ with tab4:
         </div>
         """, unsafe_allow_html=True)
         
-        # 發音按鈕
         col_audio, col_space = st.columns([1, 4])
         with col_audio:
             if st.button("🔊 聽發音", key="rpg_audio_btn"):
@@ -437,14 +426,12 @@ with tab4:
                 if selected == rq['meaning']:
                     dmg = random.randint(15, 25)
                     st.session_state.monster_hp = max(0, st.session_state.monster_hp - dmg)
-                    # --- 修正點：播放長語句音效 ---
                     autoplay_audio("That is correct! Attack!") 
                     st.toast(f"⚔️ 攻擊成功！造成 {dmg} 點傷害！", icon="💥")
                     update_learning_status(df, rq['word'], new_level=4)
                 else:
                     dmg = random.randint(10, 20)
                     st.session_state.player_hp = max(0, st.session_state.player_hp - dmg)
-                    # --- 修正點：播放長語句音效 ---
                     autoplay_audio("Wrong! You take damage.")
                     st.toast(f"🛡️ 答錯了！受到 {dmg} 點傷害！", icon="🩸")
                     update_learning_status(df, rq['word'], new_level=1)
